@@ -8,7 +8,8 @@
 
   <a href="https://www.ansible.com/" target="_blank" rel="noreferrer"><img src="https://upload.wikimedia.org/wikipedia/commons/2/24/Ansible_logo.svg" width="36" height="36" alt="Ansible" /></a>
   <a href="https://www.mysql.com/" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/danielcranney/readme-generator/main/public/icons/skills/mysql-colored.svg" width="36" height="36" alt="MySQL" /></a>
-  <img src="https://upload.wikimedia.org/wikipedia/commons/3/34/PHP_Logo.png" width="36" height="36" alt="PHP" />
+  <img src="https://www.vectorlogo.zone/logos/php/php-ar21.svg" width="36" height="36" alt="PHP" />
+
 
 
 
