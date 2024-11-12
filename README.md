@@ -13,9 +13,12 @@
 
 
 
-  <img src="https://img.icons8.com/ios-filled/50/000000/nginx.png" width="36" height="36" alt="Nginx" />
-  <img src="https://cdn.iconscout.com/icon/free/png-256/php-40-1175153.png" width="36" height="36" alt="PHP" />
-  <img src="https://www.svgrepo.com/show/303599/php-logo.svg" width="36" height="36" alt="PHP" />
+  <img src="https://upload.wikimedia.org/wikipedia/commons/a/a7/Nginx_logo.svg" width="36" height="36" alt="Nginx" />
+  <img src="https://www.svgrepo.com/show/303210/nginx-logo.svg" width="36" height="36" alt="Nginx" />
+  <img src="https://cdn.iconscout.com/icon/free/png-256/nginx-3-1175209.png" width="36" height="36" alt="Nginx" />
+  <img src="https://www.vectorlogo.zone/logos/nginx/nginx-ar21.svg" width="36" height="36" alt="Nginx" />
+  <img src="https://upload.wikimedia.org/wikipedia/commons/3/3f/Nginx_logo.svg" width="36" height="36" alt="Nginx" />
+
 
 
 
