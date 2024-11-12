@@ -1,0 +1,256 @@
+---
+- name: Deploy Docker application using Ansible
+  hosts: test
+  become: yes
+
+  vars:
+    compose_file_path: "/opt/docker-app"  # Путь, где будут храниться файлы на клиенте
+    docker_compose_version: "1.29.2"      # Версия Docker Compose, которую нужно установить
+    nginx_conf_path: "/opt/docker-app/nginx/nginx.conf"  # Путь к nginx.conf
+    nginx_container_name: "docker-app_nginx_1"  # Имя контейнера с Nginx
+    script_path: "/usr/local/bin/nginx-monitor.sh"
+    service_name: "nginx-monitor"
+
+  tasks:
+
+    # 1. Копирование файлов с хоста на клиент
+    - name: Ensure target directory exists
+      file:
+        path: "{{ compose_file_path }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy additional files if needed
+      copy:
+        src: ./src  # Дополнительные файлы
+        dest: "{{ compose_file_path }}"
+        mode: '0644'
+
+    # 2. Установка Docker (если он не установлен)
+    - name: Install dependencies for Docker
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        state: present
+        update_cache: yes
+
+    - name: Install Docker
+      apt:
+        name: docker-ce
+        state: present
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    # 3. Установка Docker Compose (если не установлен)
+    - name: Check if Docker Compose is installed
+      command: /usr/local/bin/docker-compose --version
+      register: docker_compose_check
+      ignore_errors: yes
+
+    - name: Install Docker Compose if not present
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-Linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+      when: docker_compose_check.failed
+
+    - name: Verify Docker Compose installation
+      command: /usr/local/bin/docker-compose --version
+      register: docker_compose_version_check
+
+    - name: Output Docker Compose version
+      debug:
+        msg: "Docker Compose version: {{ docker_compose_version_check.stdout }}"
+
+    # Создание структуры каталогов
+    - name: Create required directories
+      file:
+        path: "{{ compose_file_path }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - nginx
+        - php
+        - html
+
+    # Копирование конфигураций
+    - name: Copy nginx configuration
+      copy:
+        content: |
+          worker_processes auto;
+          events {
+              worker_connections 1024;
+          }
+
+          http {
+              include       mime.types;
+              default_type  applivattion/octet-stream;
+
+              sendfile        on;
+              keepalive_timeout  65;
+
+              server {
+                  listen 80;
+                  server_name localhost;
+
+                  root /var/www/html;
+                  index index.php index.html;
+
+                  location / {
+                      try_files $uri $uri/ =404;
+                  }
+
+                  location ~ \.php$ {
+                      include fastcgi_params;
+                      fastcgi_pass php:9000;
+                      fastcgi_index index.php;
+                      fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                  }
+
+                  location ~ /\.ht {
+                      deny all;
+                  }
+              }
+          }
+
+        dest: "{{ compose_file_path }}/nginx/nginx.conf"
+        mode: '0644'
+
+
+    - name: Create Dockerfile for PHP
+      copy:
+        content: |
+          FROM php:8.1-fpm
+
+          # Установка расширений PHP
+          RUN docker-php-ext-install pdo pdo_mysql
+
+          # Копируем файлы нашего проекта в контейнер
+          WORKDIR /var/www/html
+          COPY . /var/www/html
+
+          # Даем правильные права
+          RUN chown -R www-data:www-data /var/www/html \
+              && chmod -R 755 /var/www/html
+
+          # Открываем порт для PHP
+          EXPOSE 9000
+        dest: "{{ compose_file_path }}/php/Dockerfile"
+        mode: '0644'
+
+    - name: Copy Docker Compose file
+      copy:
+        content: |
+          version: '3.8'
+
+          services:
+            nginx:
+              image: nginx:latest
+              ports:
+                - "80:80"
+              volumes:
+                - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+                - ./html:/var/www/html
+              depends_on:
+                - php
+              networks:
+                - app-network
+
+            php:
+              build: ./php
+              volumes:
+                - ./html:/var/www/html
+              networks:
+                - app-network
+
+            mysql:
+              image: mysql:5.7
+              environment:
+                MYSQL_ROOT_PASSWORD: root_password
+                MYSQL_DATABASE: my_database
+                MYSQL_USER: my_user
+                MYSQL_PASSWORD: my_password
+              volumes:
+                - mysql_data:/var/lib/mysql
+              networks:
+                - app-network
+
+          volumes:
+            mysql_data:
+
+          networks:
+            app-network:
+              driver: bridge
+        dest: "{{ compose_file_path }}/docker-compose.yml"
+        mode: '0644'
+
+    # 4. Запуск Docker Compose
+    - name: Run Docker Compose
+      command: docker-compose -f "{{ compose_file_path }}/docker-compose.yml" up -d
+
+    # 5. Установка inotify-tools, если не установлен
+    - name: Ensure inotify-tools is installed
+      apt:
+        name: inotify-tools
+        state: present
+
+    # 6. Создание скрипта для мониторинга изменений в nginx.conf
+    - name: Create inotify monitoring script
+      copy:
+        content: |
+          #!/bin/bash
+
+          CONFIG_FILE="{{ nginx_conf_path }}"
+          CONTAINER="{{ nginx_container_name }}"
+
+          inotifywait -m -e modify "$CONFIG_FILE" | while read -r events; do
+              echo "Detected change in $CONFIG_FILE, restarting Nginx container $CONTAINER..."
+              docker restart "$CONTAINER"
+          done
+        dest: "{{ script_path }}"
+        mode: '0755'
+
+    # 7. Создание службы systemd
+    - name: Create systemd service for inotify monitoring
+      copy:
+        content: |
+          [Unit]
+          Description=Monitor Nginx config for changes and restart Nginx container
+          After=docker.service
+
+          [Service]
+          ExecStart={{ script_path }}
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/{{ service_name }}.service
+        mode: '0644'
+
+    # 8. Перезагрузка systemd для применения новой службы
+    - name: Reload systemd
+      command: systemctl daemon-reload
+
+    # 9. Включение и запуск службы
+    - name: Enable and start the nginx-monitor service
+      systemd:
+        name: "{{ service_name }}"
+        enabled: yes
+        state: started
